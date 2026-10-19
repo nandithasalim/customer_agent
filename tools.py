@@ -78,3 +78,38 @@ def book_slot(session_id: str, slot_id: int, name: str, phone: str) -> dict:
     except UniqueViolation:
         # Safety net fired: the partial index blocked a 2nd confirmed booking
         return {"ok": False, "error": "taken"}
+    
+def cancel_booking(session_id: str, booking_id: int) -> dict:
+    with connect() as conn:
+        with conn.transaction():
+            b = conn.execute(
+                "SELECT id, slot_id, status, idempotency_key FROM bookings "
+                "WHERE id = %s FOR UPDATE",
+                (booking_id,),
+            ).fetchone()
+
+            # Not found, or belongs to another chat -> same answer
+            if b is None or b["idempotency_key"].rsplit(":", 1)[0] != session_id:
+                return {"ok": False, "error": "not_found"}
+
+            if b["status"] == "cancelled":
+                return {"ok": True, "booking_id": b["id"], "already_cancelled": True}
+
+            conn.execute(
+                "UPDATE bookings SET status = 'cancelled' WHERE id = %s", (b["id"],)
+            )
+            conn.execute(
+                "UPDATE slots SET is_booked = FALSE WHERE id = %s", (b["slot_id"],)
+            )
+            return {"ok": True, "booking_id": b["id"], "already_cancelled": False}
+
+
+def handoff_to_human(session_id: str, reason: str) -> dict:
+    with connect() as conn:
+        row = conn.execute(
+            "INSERT INTO handoffs (session_id, reason) VALUES (%s, %s) RETURNING id",
+            (session_id, reason),
+        ).fetchone()
+        conn.commit()
+    return {"ok": True, "handoff_id": row["id"],
+            "message": "A staff member will call you back shortly."}
