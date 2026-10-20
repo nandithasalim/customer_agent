@@ -1,3 +1,4 @@
+import re
 from zoneinfo import ZoneInfo
 from db import connect
 from psycopg.errors import UniqueViolation
@@ -29,6 +30,16 @@ def list_slots(day: str) -> dict:
 
 def book_slot(session_id: str, slot_id: int, name: str, phone: str) -> dict:
     key = f"{session_id}:{slot_id}"
+
+    # phone must be a valid 10-digit Indian mobile number (starts with 6-9)
+    digits = re.sub(r"\D", "", phone or "")
+    if len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+    if not re.fullmatch(r"[6-9]\d{9}", digits):
+        return {"ok": False, "error": "invalid_phone",
+                "message": "Phone must be a valid 10-digit mobile number."}
+    phone = digits
+
     try:
         with connect() as conn:
             with conn.transaction():          # BEGIN ... COMMIT (ROLLBACK on error)
@@ -54,7 +65,17 @@ def book_slot(session_id: str, slot_id: int, name: str, phone: str) -> dict:
                 if slot["is_booked"]:
                     return {"ok": False, "error": "taken"}
 
-                # 4. Book it (reuse the row if this chat cancelled earlier)
+                # 4. One active booking per chat
+                other = conn.execute(
+                    "SELECT id FROM bookings WHERE split_part(idempotency_key, ':', 1) = %s "
+                    "AND status = 'confirmed' AND slot_id <> %s",
+                    (session_id, slot_id),
+                ).fetchone()
+                if other:
+                    return {"ok": False, "error": "already_booked", "booking_id": other["id"],
+                            "message": "This chat already has a booking. Cancel it first if the customer wants a different time."}
+
+                # 5. Book it (reuse the row if this chat cancelled earlier)
                 if existing:  # status was 'cancelled'
                     row = conn.execute(
                         "UPDATE bookings SET status = 'confirmed', "
@@ -78,7 +99,8 @@ def book_slot(session_id: str, slot_id: int, name: str, phone: str) -> dict:
     except UniqueViolation:
         # Safety net fired: the partial index blocked a 2nd confirmed booking
         return {"ok": False, "error": "taken"}
-    
+
+
 def cancel_booking(session_id: str, booking_id: int) -> dict:
     with connect() as conn:
         with conn.transaction():
@@ -106,10 +128,17 @@ def cancel_booking(session_id: str, booking_id: int) -> dict:
 
 def handoff_to_human(session_id: str, reason: str) -> dict:
     with connect() as conn:
+        # one handoff per chat: if staff were already notified, don't create another ticket
+        existing = conn.execute(
+            "SELECT id FROM handoffs WHERE session_id = %s ORDER BY id LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        if existing:
+            return {"ok": True, "handoff_id": existing["id"], "already_handed_off": True,
+                    "message": "Staff were already notified and will call back shortly."}
         row = conn.execute(
             "INSERT INTO handoffs (session_id, reason) VALUES (%s, %s) RETURNING id",
             (session_id, reason),
         ).fetchone()
-        conn.commit()
     return {"ok": True, "handoff_id": row["id"],
             "message": "A staff member will call you back shortly."}

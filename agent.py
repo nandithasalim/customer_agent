@@ -7,7 +7,7 @@ from psycopg.types.json import Jsonb
 from db import connect
 from tools import list_slots, book_slot, cancel_booking, handoff_to_human
 
-load_dotenv()
+load_dotenv(override=True)
 client = OpenAI()
 MODEL = "gpt-4o-mini"
 MAX_STEPS = 6
@@ -19,16 +19,17 @@ def system_prompt():
 Today is {now:%A %d %B %Y}, current time {now:%I:%M %p} IST.
 
 Rules:
-- EMERGENCY (chest pain, trouble breathing, heavy bleeding, fainting, stroke signs, severe injury, thoughts of self-harm): in your VERY FIRST reply, call handoff_to_human AND tell the customer to call 112 (or 108 for an ambulance) immediately. Never offer an appointment. Never say 'stay on the line' or promise when staff will respond.
+- EMERGENCY (chest pain, trouble breathing, heavy bleeding, fainting, stroke signs, severe injury, thoughts of self-harm): in your VERY FIRST reply call handoff_to_human AND tell the customer to call 112 (or 108 for an ambulance) immediately. Never offer an appointment. Never say 'stay on the line'.
+- Hand off to staff (handoff_to_human) ONLY for: emergencies, complaints, payment or refund questions, or when the customer asks for a person. Call it at most once per chat. If staff were already notified, do not call it again; just say staff have been notified and will call back.
+- You cannot give medical advice (medicines, doses, diagnosis). If asked, say so politely in one sentence, say the doctor can discuss it at the appointment, and carry on with the booking. Do NOT hand off for this.
+- After you have handed off, do not book or cancel anything for that customer.
 - ONLY offer appointment times returned by the list_slots tool. Never invent a time.
-- Before booking, confirm the customer's name, phone number and the exact slot.
-- Call book_slot only after the customer clearly says yes.
+- Before calling book_slot, write one message that states the customer's name, phone number and the exact time, and ask 'Shall I book it?'. Call book_slot only after the customer says yes, even if they gave all the details in one message.
+- If book_slot returns invalid_phone, ask for a valid 10-digit mobile number. Never invent or leave out a phone number.
+- If book_slot returns already_booked, tell the customer they already have that booking. To change the time: cancel_booking the old one first, then book the new slot.
 - If a booking fails because the slot is taken, say so and offer other slots.
-- To cancel, you need the booking id from earlier in this chat.
-- Call handoff_to_human for: medical emergencies or serious symptoms, complaints,
-  payment or refund questions, anything you cannot do, or if the customer asks for a person.
-  For emergencies also tell them to call emergency services right away.
-- Never give medical advice. Keep replies short and friendly."""
+- To cancel, use the booking id from earlier in this chat.
+Keep replies short and friendly."""
 
 
 TOOLS = [
@@ -61,8 +62,17 @@ TOOLS = [
 ]
 
 
+def handed_off(session_id):
+    with connect() as conn:
+        return conn.execute("SELECT 1 FROM handoffs WHERE session_id = %s LIMIT 1",
+                            (session_id,)).fetchone() is not None
+
+
 def run_tool(session_id, name, args):
     # session_id comes from US, never from the model
+    if name in ("book_slot", "cancel_booking") and handed_off(session_id):
+        return {"ok": False, "error": "handed_off",
+                "message": "A staff member is handling this customer. Do not book or cancel."}
     try:
         if name == "list_slots":
             return list_slots(args["day"])
