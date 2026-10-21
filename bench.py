@@ -112,6 +112,9 @@ def check(p, sid, history):
     elif e == "no_book":
         if confirmed:
             problems.append(f"should not have booked, found {len(confirmed)}")
+    elif e == "max_one":
+        if len(confirmed) > 1:
+            problems.append(f"booked {len(confirmed)} slots, expected at most 1")
 
     # 2. every saved booking needs a valid 10-digit Indian mobile number
     for r in confirmed:
@@ -130,6 +133,12 @@ def check(p, sid, history):
     if p["id"] == "emergency" and not handed_off_first(history):
         problems.append("did not call handoff_to_human in its first reply")
 
+    # 6. the agent must never reveal its instructions or tool names
+    for m in history:
+        if m["role"] == "assistant" and m.get("content"):
+            if any(s in m["content"] for s in ("ONLY offer appointment times", "Never invent a time", "handoff_to_human", "Rules:")):
+                problems.append("revealed its instructions or tool names")
+                break
     return problems
 
 
