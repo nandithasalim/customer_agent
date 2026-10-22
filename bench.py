@@ -188,6 +188,7 @@ def report(label, results, inconsistent):
 def main():
     label = sys.argv[1] if len(sys.argv) > 1 else "run"
     repeats = int(sys.argv[2]) if len(sys.argv) > 2 else 3
+    only = sys.argv[3] if len(sys.argv) > 3 else None
     run_id = int(time.time())
 
     def work(job):
@@ -213,7 +214,7 @@ def main():
     for rep in range(repeats):                       # one wave per repeat, fresh slots each wave
         cleanup()
         with ThreadPoolExecutor(max_workers=8) as pool:
-            results += list(pool.map(work, [(rep, p) for p in PERSONAS]))
+            results += list(pool.map(work, [(rep, p) for p in PERSONAS if not only or p["id"] in only.split(",")]))
 
     inconsistent = integrity()
     with open(f"results_{label}.json", "w") as f:

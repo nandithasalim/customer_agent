@@ -41,7 +41,7 @@ Pass/fail counts only checks that code can verify (database state, handoff count
 ## Known limitations
 
 - Customers are LLM-simulated, so the bench is a proxy for real users. 80 chats is a small sample (one chat is about 1.25 points).
-- Both remaining failures are Malayalam-in-English-letters ("Manglish") chats. One was a test problem (the fake customer asked for dates the database has no slots for). In the other the agent answered in broken Malayalam, asked an unnecessary question, and misread "nale" (tomorrow). Better multilingual handling is the next improvement.
+- The 2 remaining failures in the main run were both Manglish chats. Reading them, one was a test problem (the fake customer asked for dates the database has no slots for) and the other had the agent answering in broken Malayalam. After tightening that persona (tomorrow, around 2 PM) and adding Hinglish and Tanglish customers, the unchanged agent handled 30/30 chats in the three languages (right slot, name and phone). The main 80-chat numbers above were measured with the earlier, looser Manglish persona. These are short code-mixed text messages written by an LLM, not real speech or real users.
 - In an earlier run, one chat booked and handed off in the same turn for a medicine question despite the prompt rule. The prompt is not a hard guarantee; the code guards are.
 - The clinic, its data and its customers are fictional. There is no real patient data.
 
