@@ -1,36 +1,77 @@
-# customer_agent
+# customer_agent: an AI appointment assistant, and a bench that tests it
 
-An AI receptionist for a clinic that books appointments over chat, plus a test bench that throws dozens of simulated customers at it and reports exactly where it fails.
+A chat agent for a (fictional) clinic, Lakeside Clinic, Kochi. It books and cancels appointments through tool calls (gpt-4o-mini) on Postgres, and hands over to a human when it should. A test bench plays 16 kinds of simulated customers against it and reports what breaks.
 
-## Why
+## Results
 
-Customer-facing AI agents (support, booking, sales, collections) usually work in demos and fail with real customers. They double-book, invent times that don't exist, book without the customer's confirmation, or miss when to hand off to a human. This project builds a small agent and the tooling to find those failures.
+Same bench, same 16 customer types x 5 runs = 80 simulated chats per column.
 
-## How it works
+| | Before fixes | After fixes |
+|---|---|---|
+| Chats handled correctly | 54/80 (67%) | **78/80 (97%)** |
+| Slot integrity mismatches (free slot with a booking, or booked slot without one) | 0 | 0 |
 
-**Part A: the agent**
-- FastAPI chat endpoint, with an LLM (`gpt-4o-mini`) using tool calls
-- Tools: `list_slots`, `book_slot`, `cancel_booking`, `handoff_to_human`. The LLM can only touch data through these.
-- Postgres as the source of truth for slots, bookings, conversation logs and handoffs
-- Safe under concurrency:
-  - an idempotency key per booking, so a repeated request returns the same booking
-  - `SELECT … FOR UPDATE` row locking inside a transaction, so two customers can't take one slot
-  - a partial unique index (one confirmed booking per slot) as a database-level safety net
+Pass/fail counts only checks that code can verify (database state, handoff counts, phone validity). An LLM also reviews each chat, but its notes are advisory and do not change the score.
 
-**Part B: the test bench**
-- Personas: simulated customers with goals and behaviour (confused, angry, code-mixed Malayalam/English, emergencies, prompt-injection attempts)
-- A runner that plays many conversations at once
-- A judge: hard checks against the database plus an LLM grader
-- A report: success rate, failure types with example transcripts, latency and cost per conversation
+## What the bench found, and what I changed
 
-## Status
+| Problem found | Fix |
+|---|---|
+| Up to 14 handoff tickets created for a single chat | One handoff per chat, enforced in the tool (`handoff_to_human` is idempotent) |
+| Bookings saved with an empty or fake phone (`''`, `555-1234`) | `book_slot` validates a 10-digit Indian mobile number |
+| A hacker persona bulk-booked 4 slots; a customer who changed their mind got 2 bookings | One active booking per chat, enforced in `book_slot` |
+| Normal booking customers (e.g. asking about medicine) were handed to staff | Prompt: decline medical advice, keep booking, do not hand off |
+| Bot kept booking after handing off | Code guard: after a handoff, `book_slot` and `cancel_booking` are refused |
+| Slow, inconsistent escalation of emergencies; booking without asking "Shall I book it?" | Prompt rules: hand off in the first reply and tell the customer to call 112/108; confirm before booking |
 
-- [x] Database schema (slots, bookings, messages, handoffs)
-- [ ] Tools and concurrency test
-- [ ] Agent loop and `/chat` endpoint
-- [ ] Test bench: personas, runner, judge, report
-- [ ] Voice layer
+## How booking stays correct under concurrency
 
-## Stack
+- `book_slot` locks the slot row (`SELECT ... FOR UPDATE`) inside a transaction.
+- An idempotency key (`session_id:slot_id`) makes repeated calls return the same booking.
+- A partial unique index (`one confirmed booking per slot`) is a last line of defence in Postgres.
+- `race_test.py`: 20 customers booking the same slot at the same moment gave exactly 1 booking and 19 "taken". 10 simultaneous retries from one chat gave exactly 1 booking.
 
-Python · FastAPI · PostgreSQL · psycopg 3 · OpenAI API · Docker
+## How the bench works
+
+1. `personas.py`: 16 customer types (happy path, vague, rude, changes their mind, cancels, emergency, complaint, refund, wants a human, asks for medical advice, prompt injection, outside hours, past date, wrong phone number, one-word replies, Manglish, repeated "yes").
+2. `bench.py`: a second LLM plays each customer and chats with the real agent for up to 14 turns, 8 chats at a time. Every chat uses real tools and a real database.
+3. Checks per chat: did the right booking, cancellation or handoff happen, valid phone, at most one handoff, emergencies handled in the first reply, no instructions leaked. After the run, a slot-integrity check.
+4. Output: `report_<label>.html` with a pass rate and every transcript, failures first.
+
+## Known limitations
+
+- Customers are LLM-simulated, so the bench is a proxy for real users. 80 chats is a small sample (one chat is about 1.25 points).
+- Both remaining failures are Malayalam-in-English-letters ("Manglish") chats. One was a test problem (the fake customer asked for dates the database has no slots for). In the other the agent answered in broken Malayalam, asked an unnecessary question, and misread "nale" (tomorrow). Better multilingual handling is the next improvement.
+- In an earlier run, one chat booked and handed off in the same turn for a medicine question despite the prompt rule. The prompt is not a hard guarantee; the code guards are.
+- The clinic, its data and its customers are fictional. There is no real patient data.
+
+## Run it
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install openai fastapi uvicorn python-dotenv "psycopg[binary]"
+docker run --name pg -e POSTGRES_PASSWORD=dev -p 5432:5432 -d postgres
+docker exec -i pg psql -U postgres < schema.sql        # seeds 3 days of slots
+``` 
+The bench needs more slots than `schema.sql` seeds. Add 30 days:
+```bash
+docker exec -i pg psql -U postgres -c "
+INSERT INTO slots (starts_at)
+SELECT (d + make_interval(hours => h, mins => m)) AT TIME ZONE 'Asia/Kolkata'
+FROM generate_series(date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata'),
+     date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') + interval '30 day', interval '1 day') AS d,
+     generate_series(9, 19) AS h, (VALUES (0), (30)) AS v(m)
+ON CONFLICT DO NOTHING;"
+```
+
+```bash
+python3 talk.py me                 # chat with the agent in the terminal
+uvicorn main:app --reload          # POST /chat {"session_id": "...", "message": "..."}
+python3 race_test.py               # concurrency test
+python3 bench.py mylabel 5         # 16 customer types x 5 runs, writes report_mylabel.html
+```
+An 80-chat run uses a few million gpt-4o-mini tokens.
+
+## Files
+
+`schema.sql` tables and constraints | `tools.py` the four tools | `agent.py` the LLM tool-calling loop | `main.py` the API | `talk.py` terminal chat | `race_test.py` concurrency test | `personas.py`, `bench.py` the test bench | `final_runs.sh` the before/after measurement
