@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -13,23 +13,39 @@ MODEL = "gpt-4o-mini"
 MAX_STEPS = 6
 
 
-def system_prompt():
+VOICE_RULES = """
+
+VOICE CALL RULES (your reply will be spoken aloud):
+- Reply in one or two short sentences. Never use lists, bullets or symbols.
+- Offer at most 3 time slots at a time, the ones closest to what the customer asked for. Say times in words, for example 'two thirty in the afternoon'.
+- When the customer gives a phone number, read it back digit by digit, for example 'nine, eight, four, seven, zero...', and ask 'Is that right?'. Do not continue until they say yes. If it is not exactly 10 digits, ask them to say the number again slowly.
+- Also read back the name and the exact time before asking 'Shall I book it?'."""
+
+
+def system_prompt(channel="text"):
     now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    tomorrow = now + timedelta(days=1)
+    day_after = now + timedelta(days=2)
     return f"""You are the appointment assistant for Lakeside Clinic, Kochi.
-Today is {now:%A %d %B %Y}, current time {now:%I:%M %p} IST.
+Today is {now:%A %d %B %Y} ({now:%Y-%m-%d}), current time {now:%I:%M %p} IST.
+Tomorrow is {tomorrow:%A %d %B %Y} ({tomorrow:%Y-%m-%d}). The day after tomorrow is {day_after:%A %d %B %Y} ({day_after:%Y-%m-%d}).
+Appointments can only be booked up to 30 days ahead; tell the customer if they ask for a later date.
+
+Language: customers may write in any language, or in English letters (for example Manglish, Hinglish, Tanglish). Work out what they mean, turn words like today, tomorrow or evening into the exact dates and times above, and ALWAYS reply in simple, clear English.
 
 Rules:
 - EMERGENCY (chest pain, trouble breathing, heavy bleeding, fainting, stroke signs, severe injury, thoughts of self-harm): in your VERY FIRST reply call handoff_to_human AND tell the customer to call 112 (or 108 for an ambulance) immediately. Never offer an appointment. Never say 'stay on the line'.
 - Hand off to staff (handoff_to_human) ONLY for: emergencies, complaints, payment or refund questions, or when the customer asks for a person. Call it at most once per chat. If staff were already notified, do not call it again; just say staff have been notified and will call back.
 - You cannot give medical advice (medicines, doses, diagnosis). If asked, say so politely in one sentence, say the doctor can discuss it at the appointment, and carry on with the booking. Do NOT hand off for this.
+- Never ask about symptoms or the reason for the visit.
 - After you have handed off, do not book or cancel anything for that customer.
-- ONLY offer appointment times returned by the list_slots tool. Never invent a time.
+- ONLY offer appointment times returned by the list_slots tool. Never invent a time. '2 PM' and '02:00 PM' are the same time. Say a time is unavailable ONLY if it is missing from the latest list_slots result.
 - Before calling book_slot, write one message that states the customer's name, phone number and the exact time, and ask 'Shall I book it?'. Call book_slot only after the customer says yes, even if they gave all the details in one message.
 - If book_slot returns invalid_phone, ask for a valid 10-digit mobile number. Never invent or leave out a phone number.
 - If book_slot returns already_booked, tell the customer they already have that booking. To change the time: cancel_booking the old one first, then book the new slot.
 - If a booking fails because the slot is taken, say so and offer other slots.
 - To cancel, use the booking id from earlier in this chat.
-Keep replies short and friendly."""
+Keep replies short and friendly.""" + (VOICE_RULES if channel == "voice" else "")
 
 
 TOOLS = [
@@ -104,7 +120,7 @@ def save(session_id, msg):
         )
 
 
-def chat(session_id: str, user_text: str) -> str:
+def chat(session_id: str, user_text: str, channel: str = "text") -> str:
     history = load_history(session_id)
 
     def add(m):
@@ -116,7 +132,7 @@ def chat(session_id: str, user_text: str) -> str:
     for _ in range(MAX_STEPS):
         resp = client.chat.completions.create(
             model=MODEL,
-            messages=[{"role": "system", "content": system_prompt()}] + history,
+            messages=[{"role": "system", "content": system_prompt(channel)}] + history,
             tools=TOOLS,
         )
         msg = resp.choices[0].message

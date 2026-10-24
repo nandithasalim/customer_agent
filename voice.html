@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Lakeside Clinic - Voice Booking</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 520px; margin: 40px auto; padding: 0 16px; }
+  button { font-size: 18px; padding: 14px 28px; border-radius: 999px; border: 0;
+           background: #1a7f5a; color: #fff; cursor: pointer; }
+  button.rec { background: #c0392b; }
+  button:disabled { background: #999; }
+  .msg { margin: 12px 0; padding: 10px 14px; border-radius: 10px; }
+  .you { background: #eef; }
+  .bot { background: #efe; }
+  small { color: #666; }
+</style>
+</head>
+<body>
+  <h2>Lakeside Clinic, Kochi</h2>
+  <p><small>Click the button, speak, click again to send.</small></p>
+  <button id="btn">Start talking</button>
+  <div id="log"></div>
+
+<script>
+const sid = "web-" + Date.now();
+const btn = document.getElementById("btn");
+const log = document.getElementById("log");
+let rec = null, chunks = [];
+
+function add(cls, who, text) {
+  const d = document.createElement("div");
+  d.className = "msg " + cls;
+  d.textContent = who + ": " + text;
+  log.appendChild(d);
+}
+
+btn.onclick = async () => {
+  if (rec && rec.state === "recording") { rec.stop(); return; }
+
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  rec = new MediaRecorder(stream);
+  chunks = [];
+  rec.ondataavailable = e => chunks.push(e.data);
+  rec.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    btn.classList.remove("rec");
+    btn.disabled = true;
+    btn.textContent = "Thinking...";
+
+    const blob = new Blob(chunks, { type: rec.mimeType });
+    const form = new FormData();
+    form.append("session_id", sid);
+    form.append("audio", blob, "call");
+
+    try {
+      const r = await fetch("/voice", { method: "POST", body: form });
+      const j = await r.json();
+      add("you", "You (heard as)", j.heard);
+      add("bot", "Agent", j.reply);
+      const a = new Audio("data:audio/mpeg;base64," + j.audio);
+      await a.play();
+    } catch (e) {
+      add("bot", "Error", e.toString());
+    }
+    btn.disabled = false;
+    btn.textContent = "Start talking";
+  };
+  rec.start();
+  btn.classList.add("rec");
+  btn.textContent = "Stop and send";
+};
+</script>
+</body>
+</html>
