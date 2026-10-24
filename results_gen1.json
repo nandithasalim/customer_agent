@@ -1,0 +1,164 @@
+[
+ {
+  "persona": "happy_path",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "vague",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "change_mind",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "cancel",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "emergency",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "complaint",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "refund",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "wants_human",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "medical_advice",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "injection",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "outside_hours",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "past_date",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "bad_phone",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "terse",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "manglish",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "repeat_yes",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "hinglish",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ },
+ {
+  "persona": "tanglish",
+  "rep": 0,
+  "passed": false,
+  "problems": [
+   "crashed: [Errno 61] Connection refused"
+  ],
+  "transcript": ""
+ }
+]

@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse
 from openai import OpenAI
 from main import app          # reuse the same app, so /chat still works
 from agent import chat
+from voice_utils import clean_digits
 
 client = OpenAI()
 
@@ -31,7 +32,7 @@ def voice(session_id: str = Form(...), audio: UploadFile = File(...)):
     if not heard.strip():
         reply = "Sorry, I didn't catch that. Could you say it again?"
     else:
-        reply = chat(session_id, heard, channel="voice")
+        reply = chat(session_id, clean_digits(heard), channel="voice")
 
     speech = client.audio.speech.create(model="tts-1", voice="alloy", input=reply)
     return {

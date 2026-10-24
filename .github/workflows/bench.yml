@@ -1,0 +1,81 @@
+name: agent-bench
+
+on:
+  pull_request:
+    paths:
+      - "agent.py"
+      - "tools.py"
+      - "main.py"
+      - "schema.sql"
+      - "personas.py"
+      - "genbench.py"
+      - "suites/**"
+      - ".github/workflows/bench.yml"
+  workflow_dispatch:
+    inputs:
+      repeats:
+        description: "Runs per customer type (5 = full 90-chat run)"
+        default: "5"
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    # pull requests from forks do not get the OpenAI secret, so skip them
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: dev
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:dev@localhost:5432/postgres
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      PGPASSWORD: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+
+      - name: Create tables and slots
+        run: |
+          psql -h localhost -U postgres -f schema.sql
+          psql -h localhost -U postgres -f seed_slots.sql
+
+      # No LLM here: 20 customers booking one slot at once must give exactly 1 booking.
+      - name: Concurrency test
+        run: python race_test.py
+
+      - name: Start the agent
+        run: |
+          uvicorn main:app --port 8000 &
+          for i in $(seq 1 30); do curl -sf localhost:8000/docs > /dev/null && exit 0; sleep 1; done
+          echo "agent did not start"; exit 1
+
+      # On a pull request: 1 run per customer type (18 chats). Fails the build if the pass rate
+      # drops below 80% or the database ends up inconsistent. Manual run: 5 runs per type, 90% gate.
+      - name: Bench
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then MIN=0.9; else MIN=0.8; fi
+          python genbench.py suites/clinic.yaml --label ci --repeats "${{ github.event.inputs.repeats || 1 }}" --min-pass $MIN
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-report
+          path: |
+            report_ci.html
+            results_ci.json

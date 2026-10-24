@@ -1,0 +1,59 @@
+{'i': 0, 'num': '9550137624', 'voice': 'nova', 'speed': 1.0, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 1, 'num': '8915283711', 'voice': 'onyx', 'speed': 1.2, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 2, 'num': '9208254543', 'voice': 'alloy', 'speed': 1.2, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 3, 'num': '8640160538', 'voice': 'nova', 'speed': 1.4, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 4, 'num': '8370501498', 'voice': 'onyx', 'speed': 1.0, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 5, 'num': '7624560481', 'voice': 'alloy', 'speed': 1.4, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 6, 'num': '8557530936', 'voice': 'alloy', 'speed': 1.4, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 7, 'num': '8110874936', 'voice': 'echo', 'speed': 0.9, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 8, 'num': '9637655822', 'voice': 'echo', 'speed': 1.4, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 9, 'num': '9708084320', 'voice': 'nova', 'speed': 1.2, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 10, 'num': '8029002302', 'voice': 'onyx', 'speed': 0.9, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 11, 'num': '6294053216', 'voice': 'alloy', 'speed': 1.2, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 12, 'num': '6201116150', 'voice': 'alloy', 'speed': 1.4, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 13, 'num': '8081795752', 'voice': 'echo', 'speed': 1.2, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 14, 'num': '9625593587', 'voice': 'alloy', 'speed': 0.9, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 15, 'num': '8105750182', 'voice': 'alloy', 'speed': 1.0, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 16, 'num': '9832465121', 'voice': 'fable', 'speed': 1.2, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 17, 'num': '9030177105', 'voice': 'echo', 'speed': 1.2, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 18, 'num': '9751108543', 'voice': 'shimmer', 'speed': 1.4, 'whisper_ok': True, 'outcome': 'no_booking'}
+   CALLER: Hi, I need an appointment tomorrow afternoon. 
+   AGENT : I found some slots available tomorrow, but there are no afternoon appointments. The earliest is at ten in the morning. Would you like to book that?
+   CALLER: My name is Anu Nair and my number is 975-110-8543. 
+   AGENT : Just to confirm, your name is Anu Nair, your phone number is nine, seven, five, one, one, zero, eight, five, four, three, and the appointment is at ten in the morning tomorrow. Shall I book it?
+   CALLER: Yes, that's right. 
+   AGENT : Your appointment is booked for tomorrow at ten in the morning. If you need anything else, just let me know!
+   CALLER: The earliest time you offered, please. 
+   AGENT : The earliest time I offered is at ten in the morning tomorrow. Would you like to book that?
+   CALLER: Yes, please book it. 
+   AGENT : I see you already have an appointment booked for tomorrow at ten in the morning. If you want to change the time, I'll need to cancel the old one first. Would you like me to do that?
+   CALLER: Yes. 
+   AGENT : I've canceled your previous appointment. Now, would you like to book the appointment at ten in the morning again?
+{'i': 19, 'num': '7248397783', 'voice': 'onyx', 'speed': 1.4, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 20, 'num': '8607500572', 'voice': 'nova', 'speed': 1.0, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 21, 'num': '7082954126', 'voice': 'alloy', 'speed': 1.2, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 22, 'num': '9763727272', 'voice': 'alloy', 'speed': 1.2, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 23, 'num': '6898585890', 'voice': 'nova', 'speed': 1.4, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 24, 'num': '8645744829', 'voice': 'nova', 'speed': 1.4, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 25, 'num': '6675721157', 'voice': 'nova', 'speed': 0.9, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 26, 'num': '8962339400', 'voice': 'shimmer', 'speed': 0.9, 'whisper_ok': False, 'outcome': 'no_booking'}
+   CALLER: Hi, I need an appointment tomorrow afternoon. 
+   AGENT : I'm sorry, but there are no available appointment slots tomorrow afternoon. Would you like to check for another day?
+   CALLER: My name is Anu Nair and my number is 896-239-400. 
+   AGENT : I need a valid 10-digit mobile number. Could you please provide your number without any dashes or spaces?
+   CALLER: Yes, that's right. 
+   AGENT : I've informed the staff, and they will call you back shortly. 
+   CALLER: The earliest time you offered, please. 
+   AGENT : I'm sorry, but there are no available appointment slots for tomorrow. Would you like to check for another day?
+   CALLER: Yes, please book it. 
+   AGENT : It seems there are still no available slots for tomorrow. Could you please let me know another day that works for you?
+   CALLER: Yes. 
+   AGENT : Could you please tell me the date you'd like to book the appointment for?
+{'i': 27, 'num': '8410471033', 'voice': 'shimmer', 'speed': 0.9, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 28, 'num': '8020184320', 'voice': 'nova', 'speed': 1.4, 'whisper_ok': True, 'outcome': 'correct'}
+{'i': 29, 'num': '7871596243', 'voice': 'shimmer', 'speed': 1.4, 'whisper_ok': True, 'outcome': 'correct'}
+
+Whisper got the number right: 29/30
+correct: 28/30
+no_booking: 2/30
+WRONG_PHONE: 0/30

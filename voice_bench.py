@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 from openai import OpenAI
 from agent import chat
+from voice_utils import clean_digits
 from db import connect
 
 client = OpenAI()
@@ -34,16 +35,18 @@ def trial(i):
         "Hi, I need an appointment tomorrow afternoon.",
         f"My name is Anu Nair and my number is {say_number(num)}.",
         "Yes, that's right.",
-        "Two thirty please.",
+        "The earliest time you offered, please.",
         "Yes, please book it.",
         "Yes.",
     ]
     heard_num_ok = None
+    log = []
     for k, line in enumerate(lines):
         heard = speak_and_hear(line, voice, speed)
         if k == 1:
             heard_num_ok = num in "".join(c for c in heard if c.isdigit())
-        chat(sid, heard, channel="voice")
+        rep = chat(sid, clean_digits(heard), channel="voice")
+        log.append((heard, rep))
 
     with connect() as conn:
         rows = conn.execute(
@@ -56,15 +59,23 @@ def trial(i):
     else:
         outcome = "WRONG_PHONE"
     return {"i": i, "num": num, "voice": voice, "speed": speed,
-            "whisper_ok": heard_num_ok, "outcome": outcome}
+            "whisper_ok": heard_num_ok, "outcome": outcome, "log": log}
 
 
 if __name__ == "__main__":
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 10
-    with ThreadPoolExecutor(3) as ex:               # small waves so slots don't run out
+    try:
+        from bench import cleanup
+        cleanup()
+    except Exception as e:
+        print('cleanup skipped:', e)
+    with ThreadPoolExecutor(1) as ex:               # small waves so slots don't run out
         res = list(ex.map(trial, range(n)))
     for r in res:
-        print(r)
+        print({k: v for k, v in r.items() if k != 'log'})
+        if r['outcome'] != 'correct':
+            for h, a in r['log']:
+                print('   CALLER:', h, '\n   AGENT :', a)
     w = sum(r["whisper_ok"] for r in res)
     print(f"\nWhisper got the number right: {w}/{n}")
     for o in ("correct", "no_booking", "WRONG_PHONE"):

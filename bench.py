@@ -230,4 +230,5 @@ def main():
     print(f"open report_{label}.html")
 
 
-main()
+if __name__ == "__main__":
+    main()

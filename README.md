@@ -38,6 +38,27 @@ Pass/fail counts only checks that code can verify (database state, handoff count
 3. Checks per chat: did the right booking, cancellation or handoff happen, valid phone, at most one handoff, emergencies handled in the first reply, no instructions leaked. After the run, a slot-integrity check.
 4. Output: `report_<label>.html` with a pass rate and every transcript, failures first.
 
+## Test any agent: `genbench.py`
+
+`bench.py` is the original bench: it imports this agent's code directly. `genbench.py` is the same idea without that link. It talks to an agent over HTTP (`POST` a message, read the JSON reply) and takes everything else from a suite file:
+
+- `target`: the URL, the request body and the name of the reply field
+- `personas`: the simulated customers and what each one wants
+- SQL checks on the agent's database (e.g. "exactly one confirmed booking with this name and phone") and regex rules on what the agent said (e.g. "never mentions its hidden instructions")
+- `invariants` that must hold after the whole run (no slot booked twice, no slot marked booked without a booking)
+
+```bash
+python3 genbench.py suites/clinic.yaml --label mytest --repeats 5       # this clinic agent
+uvicorn faq_agent:app --app-dir examples --port 8001                    # a second agent, no database
+python3 genbench.py suites/faq.yaml --label faq --repeats 3             # checks only what it says
+```
+
+To test your own agent, copy `suites/clinic.yaml` and change the target, the personas and the SQL. `genbench.py` exits with code 1 when the pass rate is below `--min-pass` or an invariant fails, so it can gate a deploy.
+
+## CI: a regression gate
+
+`.github/workflows/bench.yml` runs on every pull request that touches the agent, its tools, the schema or the bench: it starts Postgres, runs the concurrency test (no LLM), starts the agent, and runs 18 simulated chats. The build fails if the pass rate is under 80%, any invariant breaks, or the concurrency test finds a double booking. A manual run (Actions tab > agent-bench > Run workflow) does 5 runs per customer type with a 90% gate. It needs an `OPENAI_API_KEY` repository secret. A pull-request run costs a few rupees of API usage.
+
 ## Known limitations
 
 - Customers are LLM-simulated, so the bench is a proxy for real users. 80 chats is a small sample (one chat is about 1.25 points).
@@ -74,4 +95,13 @@ An 80-chat run uses a few million gpt-4o-mini tokens.
 
 ## Files
 
-`schema.sql` tables and constraints | `tools.py` the four tools | `agent.py` the LLM tool-calling loop | `main.py` the API | `talk.py` terminal chat | `race_test.py` concurrency test | `personas.py`, `bench.py` the test bench | `final_runs.sh` the before/after measurement
+`schema.sql` tables and constraints | `tools.py` the four tools | `agent.py` the LLM tool-calling loop | `main.py` the API | `talk.py` terminal chat | `race_test.py` concurrency test | `personas.py`, `bench.py` the test bench | `final_runs.sh` the before/after measurement | `genbench.py`, `suites/` the agent-agnostic bench | `examples/faq_agent.py` a second agent | `voice_app.py`, `voice.html`, `voice_bench.py` the voice channel | `.github/workflows/bench.yml` the CI gate
+
+## Voice channel
+Browser mic page (`voice.html`, served by `voice_app.py`) -> Whisper -> the same agent with voice-specific prompt rules -> text-to-speech.
+`voice_bench.py` simulates calls with synthetic speech (6 voices, 4 speeds, random phone numbers) and checks the number stored in the database.
+
+- 30 simulated calls: 28 booked with the correct phone number, **0 booked with a wrong number**, 2 ended without a booking (see `voice_results.txt`).
+- Whisper dropped a digit once in 30 calls (`8962339400` heard as `896-239-400`); the agent refused the 9-digit number instead of booking it.
+- Bug found by this test: Whisper writes numbers like `8127-8125-97`, and the LLM counted the digits wrongly and rejected valid numbers. Fixed by merging digit groups in code and removing digit-counting from the prompt.
+- Limits: clean synthetic audio only, no phone-line noise or accents; English only; the scripted caller does not stop after a successful booking, which caused one of the two no-booking calls.
