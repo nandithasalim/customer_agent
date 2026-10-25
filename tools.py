@@ -16,7 +16,7 @@ def list_slots(day: str) -> dict:
             SELECT id, starts_at
             FROM slots
             WHERE NOT is_booked
-              AND starts_at < now()
+              AND starts_at > now()
               AND (starts_at AT TIME ZONE 'Asia/Kolkata')::date = %s::date
             ORDER BY starts_at
             """,

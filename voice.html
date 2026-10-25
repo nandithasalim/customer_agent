@@ -1,75 +1,515 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Lakeside Clinic - Voice Booking</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lakeside Front Desk</title>
+<meta name="description" content="An AI receptionist that books clinic appointments by voice, and the test bench that measures where it breaks.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 520px; margin: 40px auto; padding: 0 16px; }
-  button { font-size: 18px; padding: 14px 28px; border-radius: 999px; border: 0;
-           background: #1a7f5a; color: #fff; cursor: pointer; }
-  button.rec { background: #c0392b; }
-  button:disabled { background: #999; }
-  .msg { margin: 12px 0; padding: 10px 14px; border-radius: 10px; }
-  .you { background: #eef; }
-  .bot { background: #efe; }
-  small { color: #666; }
+  :root {
+    --paper: #f3f6f4;
+    --ink: #142422;
+    --muted: #556964;
+    --pine: #0e4a43;
+    --pine-deep: #0a3833;
+    --mint: #d6ebe3;
+    --line: #c9d6d1;
+    --amber: #f2b441;
+    --rec: #d33f49;
+    --display: "Bricolage Grotesque", "Public Sans", system-ui, sans-serif;
+    --body: "Public Sans", system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 400 17px/1.55 var(--body); }
+  a { color: var(--pine); text-underline-offset: 3px; }
+  :focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; border-radius: 6px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  /* top bar */
+  .bar { display: flex; align-items: center; gap: 16px; padding: 22px 0; }
+  .mark { display: flex; align-items: center; gap: 10px; font: 700 18px/1 var(--display); color: var(--pine); text-decoration: none; }
+  .mark svg { width: 26px; height: 26px; }
+  .bar .note { color: var(--muted); font-size: 14px; }
+  .bar .gh { margin-left: auto; font-size: 15px; font-weight: 600; }
+
+  /* hero */
+  .hero { display: grid; grid-template-columns: 1fr 1.05fr; gap: 56px; align-items: start; padding: 40px 0 88px; }
+  .hero h1 { font: 700 clamp(44px, 6.4vw, 84px)/0.98 var(--display); letter-spacing: -0.03em; margin: 0 0 24px; color: var(--pine-deep); }
+  .hero .lede { font-size: 19px; max-width: 30em; margin: 0 0 28px; color: var(--ink); }
+  .facts { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; max-width: 30em; }
+  .facts li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; color: var(--muted); font-size: 15.5px; }
+  .facts li::before { content: ""; width: 10px; height: 10px; margin-top: 8px; border-radius: 50%; background: var(--pine); }
+  .try { margin-top: 30px; font-size: 15px; color: var(--muted); max-width: 30em; }
+  .try q { color: var(--ink); quotes: "\201C" "\201D"; }
+
+  /* the call panel: the one loud thing on the page */
+  .call { background: var(--pine-deep); color: #eaf3ef; border-radius: 28px; padding: 22px; display: flex; flex-direction: column; min-height: 600px; box-shadow: 0 30px 60px -30px rgba(10,56,51,.55); }
+  .call-top { display: flex; align-items: center; gap: 12px; padding: 4px 6px 16px; border-bottom: 1px solid rgba(255,255,255,.1); }
+  .call-top .who { font: 600 16px/1.2 var(--body); }
+  .call-top .who small { display: block; font-weight: 400; color: #9fbcb3; font-size: 13px; margin-top: 3px; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--mint); display: grid; place-items: center; color: var(--pine); }
+  .avatar svg { width: 22px; height: 22px; }
+  .call-top .tools { margin-left: auto; display: flex; gap: 6px; }
+  .ghost { background: transparent; color: #cfe2db; border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 7px 14px; font: 500 14px var(--body); cursor: pointer; }
+  .ghost { white-space: nowrap; }
+  .ghost:hover { border-color: rgba(255,255,255,.4); }
+
+  #log { flex: 1; overflow-y: auto; padding: 18px 6px; display: flex; flex-direction: column; gap: 14px; max-height: 430px; scroll-behavior: smooth; }
+  .empty { margin: auto 0; color: #9fbcb3; font-size: 15px; text-align: center; padding: 24px; }
+  .line { max-width: 88%; }
+  .line .who { font-size: 12.5px; color: #8fb0a6; margin-bottom: 4px; }
+  .line .say { font-size: 16.5px; line-height: 1.45; white-space: pre-wrap; }
+  .line.agent .say { color: #ffffff; }
+  .line.caller { align-self: flex-end; text-align: right; }
+  .line.caller .say { color: #cfe2db; }
+  .line .heard { margin-top: 6px; font-size: 13.5px; color: #9fbcb3; }
+  .digits { font-variant-numeric: tabular-nums; background: rgba(242,180,65,.16); color: var(--amber); border-radius: 6px; padding: 1px 6px; letter-spacing: .02em; }
+  .line.err .say { color: #ffd3d6; }
+  .retry { margin-top: 8px; }
+
+  .dock { border-top: 1px solid rgba(255,255,255,.1); padding: 18px 6px 4px; display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: center; }
+  #mic { width: 76px; height: 76px; border-radius: 50%; border: 0; cursor: pointer; background: var(--amber); color: var(--pine-deep); display: grid; place-items: center; position: relative; transition: background .15s, transform .1s; }
+  #mic:active { transform: scale(.96); }
+  #mic svg { width: 30px; height: 30px; }
+  #mic[data-state="recording"] { background: var(--rec); color: #fff; }
+  #mic[data-state="speaking"] { background: var(--mint); color: var(--pine-deep); }
+  #mic:disabled { background: #3d5f59; color: #8fb0a6; cursor: wait; }
+  #ring { position: absolute; inset: -6px; border-radius: 50%; border: 3px solid var(--rec); opacity: 0; pointer-events: none; }
+  .dock-right { display: grid; gap: 10px; min-width: 0; }
+  #status { font: 600 15px var(--body); color: #eaf3ef; display: flex; align-items: center; gap: 10px; min-height: 22px; }
+  #meter { display: none; gap: 3px; align-items: center; height: 18px; }
+  #meter i { width: 3px; height: 4px; background: var(--rec); border-radius: 2px; }
+  #status[data-state="recording"] #meter { display: inline-flex; }
+  .type { display: flex; gap: 8px; }
+  .type input { flex: 1; min-width: 0; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14); border-radius: 12px; color: #fff; padding: 11px 14px; font: 400 15px var(--body); }
+  .type input::placeholder { color: #8fb0a6; }
+  .type button { background: var(--mint); color: var(--pine-deep); border: 0; border-radius: 12px; padding: 0 16px; font: 600 15px var(--body); cursor: pointer; }
+  .type button:disabled, .type input:disabled { opacity: .5; cursor: not-allowed; }
+
+  #settings { display: none; margin: 12px 6px 0; padding: 14px; background: rgba(255,255,255,.06); border-radius: 14px; font-size: 14px; }
+  #settings.open { display: block; }
+  #settings label { color: #9fbcb3; display: block; margin-bottom: 6px; }
+  #settings .row { display: flex; gap: 8px; }
+  #settings input { flex: 1; min-width: 0; background: rgba(0,0,0,.2); border: 1px solid rgba(255,255,255,.15); color: #fff; border-radius: 10px; padding: 8px 10px; font: 14px var(--body); }
+
+  /* below the fold: evidence */
+  section.ev { padding: 80px 0; border-top: 1px solid var(--line); }
+  section.ev h2 { font: 700 clamp(30px, 3.6vw, 44px)/1.05 var(--display); letter-spacing: -0.02em; margin: 0 0 16px; color: var(--pine-deep); max-width: 18em; }
+  section.ev .intro { max-width: 36em; color: var(--muted); margin: 0 0 40px; }
+
+  table.results { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.results th, table.results td { text-align: left; padding: 18px 16px 18px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.results th { font: 500 14px var(--body); color: var(--muted); }
+  table.results td.n { font: 700 26px/1.1 var(--display); color: var(--pine); white-space: nowrap; }
+  table.results td.n small { display: block; font: 400 13px var(--body); color: var(--muted); margin-top: 4px; }
+
+  .case { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+  .transcript { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 24px; font-size: 15.5px; }
+  .transcript p { margin: 0 0 14px; }
+  .transcript p:last-child { margin: 0; }
+  .transcript .w { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 2px; }
+  .transcript .bad { color: #9c2a32; }
+  .transcript .digits { color: #8a5a00; background: #fbecc8; }
+  .case-text p { max-width: 32em; margin: 0 0 16px; }
+
+  ol.flow { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; counter-reset: s; }
+  ol.flow li { counter-increment: s; padding: 0 20px 0 0; position: relative; }
+  ol.flow li::before { content: counter(s); display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--mint); color: var(--pine); font: 700 15px var(--display); margin-bottom: 14px; }
+  ol.flow li::after { content: ""; position: absolute; top: 17px; left: 44px; right: 10px; height: 1px; background: var(--line); }
+  ol.flow li:last-child::after { display: none; }
+  ol.flow b { display: block; font-weight: 600; margin-bottom: 4px; }
+  ol.flow span { color: var(--muted); font-size: 15px; }
+
+  footer { border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 14.5px; display: flex; flex-wrap: wrap; gap: 8px 24px; }
+  footer .push { margin-left: auto; }
+
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; gap: 36px; padding: 16px 0 64px; }
+    .call { min-height: 540px; }
+    .case { grid-template-columns: 1fr; gap: 28px; }
+    ol.flow { grid-template-columns: 1fr; gap: 22px; }
+    ol.flow li { display: grid; grid-template-columns: 48px 1fr; padding: 0; }
+    ol.flow li::before { grid-row: span 2; margin: 0; }
+    ol.flow li::after { display: none; }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: 0 16px; }
+    .bar .note { display: none; }
+    .call { padding: 16px; border-radius: 22px; }
+    .dock { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+    .dock-right { width: 100%; }
+    #status { justify-content: center; }
+    table.results thead { display: none; }
+    table.results tr { display: grid; grid-template-columns: 1fr; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    table.results td { border: 0; padding: 4px 0; }
+    footer .push { margin-left: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
 </style>
 </head>
 <body>
-  <h2>Lakeside Clinic, Kochi</h2>
-  <p><small>Click the button, speak, click again to send.</small></p>
-  <button id="btn">Start talking</button>
-  <div id="log"></div>
+
+<div class="wrap">
+  <div class="bar">
+    <a class="mark" href="#top" id="top">
+      <svg viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="8" fill="#0e4a43"/><path d="M13 6v14M6 13h14" stroke="#f2b441" stroke-width="3.2" stroke-linecap="round"/></svg>
+      Lakeside Clinic
+    </a>
+    <span class="note">A fictional clinic in Kochi, used to test a real agent</span>
+    <a class="gh" href="https://github.com/nandithasalim/customer_agent" target="_blank" rel="noopener">Code on GitHub</a>
+  </div>
+
+  <div class="hero">
+    <div>
+      <h1>Call the front desk.</h1>
+      <p class="lede">An AI receptionist that books and cancels appointments by voice. It reads your phone number back before it books, and it hands emergencies to a person straight away.</p>
+      <ul class="facts">
+        <li>Bookings are real rows in Postgres, locked so two callers can never get the same slot.</li>
+        <li>Every change is tested against 18 kinds of simulated callers before it ships.</li>
+        <li>Speech in with Whisper, speech out with text-to-speech, same agent as the text chat.</li>
+      </ul>
+      <p class="try">Press the button and try <q>I need an appointment tomorrow afternoon</q>, then give a name and a 10-digit mobile number.</p>
+    </div>
+
+    <div class="call" aria-label="Voice call with the clinic assistant">
+      <div class="call-top">
+        <div class="avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M3 12h18"/></svg>
+        </div>
+        <div class="who">Front desk assistant<small id="callinfo">Not connected</small></div>
+        <div class="tools">
+          <button class="ghost" id="newcall" type="button">New call</button>
+          <button class="ghost" id="gear" type="button" aria-expanded="false" aria-controls="settings" title="Server settings">Server</button>
+        </div>
+      </div>
+
+      <div id="settings">
+        <label for="api">Server address. Leave empty when this page is served by the agent itself.</label>
+        <div class="row">
+          <input id="api" placeholder="http://localhost:8000" inputmode="url" autocomplete="off">
+          <button class="ghost" id="saveApi" type="button">Save</button>
+        </div>
+      </div>
+
+      <div id="log" aria-live="polite">
+        <p class="empty" id="empty">Press the yellow button and speak. Press it again when you finish.</p>
+      </div>
+
+      <div class="dock">
+        <button id="mic" type="button" aria-label="Start talking" data-state="idle">
+          <span id="ring"></span>
+          <svg id="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+        </button>
+        <div class="dock-right">
+          <div id="status" data-state="idle"><span id="meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span id="statusText">Press to talk</span></div>
+          <form class="type" id="typeForm">
+            <input id="text" placeholder="Or type a message" autocomplete="off" aria-label="Type a message">
+            <button id="send" type="submit">Send</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="ev">
+  <div class="wrap">
+    <h2>Measured, not demoed.</h2>
+    <p class="intro">A second model plays customers who are vague, rude, in a hurry, writing in Manglish, having an emergency, or trying to hijack the bot. Pass or fail is decided by checking the database, not by asking a model.</p>
+    <table class="results">
+      <thead><tr><th>Result</th><th>What was measured</th></tr></thead>
+      <tbody>
+        <tr><td class="n">67% to 97%<small>54/80 to 78/80</small></td><td>Simulated chats handled correctly, before and after the fixes the bench pointed to.</td></tr>
+        <tr><td class="n">1 of 20<small>simultaneous bookings</small></td><td>Twenty callers booking the same slot at the same moment. Exactly one gets it, nineteen are told it's taken.</td></tr>
+        <tr><td class="n">0 of 30<small>wrong numbers booked</small></td><td>Simulated voice calls in six voices at four speeds. When speech recognition dropped a digit, the agent refused the number instead of booking it.</td></tr>
+        <tr><td class="n">44%<small>pass rate after a bad change</small></td><td>A flipped date comparison in the slot lookup. The bench caught it and the pull request check failed.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="ev">
+  <div class="wrap case">
+    <div class="case-text">
+      <h2>The bug only voice could find.</h2>
+      <p>Whisper writes spoken numbers in groups, like 8127-8125-97. That is a valid ten-digit number, but the language model counted the digits wrong and told the caller it was invalid, over and over.</p>
+      <p>Counting is a job for code, not for a model. The fix merges digit groups before the agent sees them, and leaves validation to the booking tool. After the fix, 28 of 30 simulated calls booked with the right number and none booked a wrong one.</p>
+    </div>
+    <div class="transcript" aria-label="Transcript from a failing test call">
+      <p><span class="w">Caller said</span>My name is Anu Nair and my number is eight one two seven, eight one two five nine seven.</p>
+      <p><span class="w">Speech recognition heard</span>My name is Anu Nair and my number is <span class="digits">8127-8125-97</span>.</p>
+      <p class="bad"><span class="w">Agent, before the fix</span>It seems the phone number you provided is not valid. Can you please say your number again slowly?</p>
+    </div>
+  </div>
+</section>
+
+<section class="ev">
+  <div class="wrap">
+    <h2>What happens when you speak.</h2>
+    <p class="intro">The voice path is a thin layer over the same agent the text chat uses, so every test of the agent also covers voice.</p>
+    <ol class="flow">
+      <li><b>Record</b><span>Your browser records until you press the button again.</span></li>
+      <li><b>Transcribe</b><span>Whisper turns the audio into text, and digit groups are merged.</span></li>
+      <li><b>Decide</b><span>The agent checks free slots and asks before it books.</span></li>
+      <li><b>Book</b><span>A locked Postgres transaction saves the booking once.</span></li>
+      <li><b>Reply</b><span>The answer is spoken back and shown above.</span></li>
+    </ol>
+  </div>
+</section>
+
+<div class="wrap">
+  <footer>
+    <span>Built by Nanditha Salim</span>
+    <a href="https://github.com/nandithasalim/customer_agent" target="_blank" rel="noopener">Source and full test reports</a>
+    <span class="push">Lakeside Clinic is fictional. No real patient data is used.</span>
+  </footer>
+</div>
 
 <script>
-const sid = "web-" + Date.now();
-const btn = document.getElementById("btn");
-const log = document.getElementById("log");
-let rec = null, chunks = [];
+const $ = id => document.getElementById(id);
+const log = $("log"), mic = $("mic"), statusEl = $("status"), statusText = $("statusText"),
+      textIn = $("text"), sendBtn = $("send"), ico = $("ico"), ring = $("ring"), info = $("callinfo");
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-function add(cls, who, text) {
-  const d = document.createElement("div");
-  d.className = "msg " + cls;
-  d.textContent = who + ": " + text;
-  log.appendChild(d);
+const ICONS = {
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  stop: '<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none"/>',
+  wait: '<circle cx="12" cy="12" r="8" stroke-dasharray="36 14"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></circle>',
+  mute: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/>'
+};
+
+let sid = newSid(), state = "idle", turns = 0;
+let recorder = null, stream = null, chunks = [], timer = null, t0 = 0;
+let audioCtx = null, analyser = null, raf = null, player = null;
+
+function newSid() { return "web-" + Date.now(); }
+function getApi() { try { return localStorage.getItem("api") || ""; } catch (e) { return ""; } }
+function setApi(v) { try { localStorage.setItem("api", v); } catch (e) {} }
+
+function setState(s, extra) {
+  state = s;
+  mic.dataset.state = s;
+  statusEl.dataset.state = s;
+  mic.disabled = s === "thinking";
+  textIn.disabled = sendBtn.disabled = (s === "thinking" || s === "recording");
+  ico.innerHTML = ({ idle: ICONS.mic, recording: ICONS.stop, thinking: ICONS.wait, speaking: ICONS.mute })[s];
+  mic.setAttribute("aria-label", ({ idle: "Start talking", recording: "Stop and send", thinking: "Working", speaking: "Stop the reply" })[s]);
+  statusText.textContent = ({
+    idle: turns ? "Your turn. Press to talk" : "Press to talk",
+    recording: "Listening " + (extra || "0:00") + ". Press to send",
+    thinking: "Working on it",
+    speaking: "Speaking. Press to stop"
+  })[s];
 }
 
-btn.onclick = async () => {
-  if (rec && rec.state === "recording") { rec.stop(); return; }
+function clearEmpty() { const e = $("empty"); if (e) e.remove(); }
 
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  rec = new MediaRecorder(stream);
+// show digit runs (phone numbers, times) as highlighted chips so misheard digits stand out
+function withDigits(el, text) {
+  const parts = String(text).split(/(\d[\d\s\-.,:]*\d|\d)/);
+  parts.forEach((p, i) => {
+    if (i % 2) { const s = document.createElement("span"); s.className = "digits"; s.textContent = p; el.appendChild(s); }
+    else if (p) el.appendChild(document.createTextNode(p));
+  });
+}
+
+function addLine(kind, text, heard) {
+  clearEmpty();
+  const row = document.createElement("div");
+  row.className = "line " + kind;
+  const who = document.createElement("div");
+  who.className = "who";
+  who.textContent = kind === "agent" ? "Assistant" : kind === "err" ? "Connection" : "You";
+  const say = document.createElement("div");
+  say.className = "say";
+  say.textContent = text;
+  row.append(who, say);
+  if (heard !== undefined) {
+    const h = document.createElement("div");
+    h.className = "heard";
+    h.append("Heard as ");
+    withDigits(h, heard || "nothing");
+    row.appendChild(h);
+  }
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+  return row;
+}
+
+function addError(msg, retry) {
+  const row = addLine("err", msg);
+  if (retry) {
+    const b = document.createElement("button");
+    b.className = "ghost retry"; b.type = "button"; b.textContent = "Try again";
+    b.onclick = () => { row.remove(); retry(); };
+    row.appendChild(b);
+  }
+}
+
+function offline(status) {
+  if (status) return "The server answered with an error (" + status + "). Check the terminal running uvicorn.";
+  return "Can't reach the booking server" + (getApi() ? " at " + getApi() : "") + ". Start it with: uvicorn voice_app:app --port 8000";
+}
+
+function connected() { turns++; info.textContent = "Connected, call " + sid.slice(4, 10); }
+
+// ---------- playback ----------
+function stopAudio() { if (player) { player.pause(); player = null; } }
+function play(b64) {
+  stopAudio();
+  player = new Audio("data:audio/mpeg;base64," + b64);
+  const done = () => { player = null; if (state === "speaking") setState("idle"); };
+  player.onended = done; player.onerror = done;
+  setState("speaking");
+  player.play().catch(done);
+}
+
+// ---------- level meter while recording ----------
+function startMeter() {
+  if (reduced) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 64;
+    audioCtx.createMediaStreamSource(stream).connect(analyser);
+    const bars = [...document.querySelectorAll("#meter i")], data = new Uint8Array(analyser.frequencyBinCount);
+    const tick = () => {
+      analyser.getByteFrequencyData(data);
+      bars.forEach((b, i) => { b.style.height = (4 + (data[i * 2 + 1] / 255) * 14) + "px"; });
+      const lvl = data.slice(1, 12).reduce((a, v) => a + v, 0) / (11 * 255);
+      ring.style.opacity = Math.min(1, lvl * 2.2);
+      ring.style.transform = "scale(" + (1 + lvl * 0.25) + ")";
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch (e) {}
+}
+function stopMeter() {
+  cancelAnimationFrame(raf);
+  ring.style.opacity = 0;
+  if (audioCtx) { audioCtx.close().catch(() => {}); audioCtx = null; }
+}
+
+// ---------- voice turn ----------
+async function startRecording() {
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    addError("This browser can't record audio. Use the text box, or open the page in Chrome.");
+    return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    addError("Microphone access is blocked. Allow it from the icon in the address bar, or use the text box.");
+    return;
+  }
   chunks = [];
-  rec.ondataavailable = e => chunks.push(e.data);
-  rec.onstop = async () => {
+  recorder = new MediaRecorder(stream);
+  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  recorder.onstop = () => {
     stream.getTracks().forEach(t => t.stop());
-    btn.classList.remove("rec");
-    btn.disabled = true;
-    btn.textContent = "Thinking...";
+    clearInterval(timer); stopMeter();
+    const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+    if (Date.now() - t0 < 500 || !blob.size) { setState("idle"); statusText.textContent = "Too short. Hold on a moment longer before sending"; return; }
+    sendVoice(blob);
+  };
+  recorder.start();
+  t0 = Date.now();
+  setState("recording");
+  startMeter();
+  timer = setInterval(() => {
+    const s = Math.floor((Date.now() - t0) / 1000);
+    setState("recording", Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"));
+  }, 250);
+}
 
-    const blob = new Blob(chunks, { type: rec.mimeType });
+async function sendVoice(blob) {
+  setState("thinking");
+  const pending = addLine("caller", "...");
+  try {
     const form = new FormData();
     form.append("session_id", sid);
-    form.append("audio", blob, "call");
+    form.append("audio", blob, blob.type.includes("mp4") ? "call.mp4" : "call.webm");
+    const r = await fetch(getApi() + "/voice", { method: "POST", body: form });
+    if (!r.ok) { pending.remove(); addError(offline(r.status), () => sendVoice(blob)); setState("idle"); return; }
+    const j = await r.json();
+    pending.remove();
+    connected();
+    addLine("caller", j.heard || "(nothing was heard)", j.heard || "");
+    addLine("agent", j.reply);
+    if (j.audio) play(j.audio); else setState("idle");
+  } catch (e) {
+    pending.remove();
+    addError(offline(), () => sendVoice(blob));
+    setState("idle");
+  }
+}
 
-    try {
-      const r = await fetch("/voice", { method: "POST", body: form });
-      const j = await r.json();
-      add("you", "You (heard as)", j.heard);
-      add("bot", "Agent", j.reply);
-      const a = new Audio("data:audio/mpeg;base64," + j.audio);
-      await a.play();
-    } catch (e) {
-      add("bot", "Error", e.toString());
-    }
-    btn.disabled = false;
-    btn.textContent = "Start talking";
-  };
-  rec.start();
-  btn.classList.add("rec");
-  btn.textContent = "Stop and send";
-};
+// ---------- text turn ----------
+async function sendText(message, showLine = true) {
+  setState("thinking");
+  if (showLine) addLine("caller", message);
+  try {
+    const r = await fetch(getApi() + "/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sid, message })
+    });
+    if (!r.ok) { addError(offline(r.status), () => sendText(message, false)); setState("idle"); return; }
+    const j = await r.json();
+    connected();
+    addLine("agent", j.reply);
+  } catch (e) {
+    addError(offline(), () => sendText(message, false));
+  }
+  setState("idle");
+}
+
+// ---------- events ----------
+mic.addEventListener("click", () => {
+  if (state === "idle") startRecording();
+  else if (state === "recording") recorder.stop();
+  else if (state === "speaking") { stopAudio(); setState("idle"); }
+});
+
+$("typeForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const m = textIn.value.trim();
+  if (!m || state !== "idle") return;
+  textIn.value = "";
+  sendText(m);
+});
+
+$("newcall").addEventListener("click", () => {
+  stopAudio();
+  if (recorder && recorder.state === "recording") {
+    recorder.onstop = null; recorder.stop();
+    stream.getTracks().forEach(t => t.stop());
+    clearInterval(timer); stopMeter();
+  }
+  sid = newSid(); turns = 0;
+  info.textContent = "Not connected";
+  log.innerHTML = '<p class="empty" id="empty">New call. Press the yellow button and speak.</p>';
+  setState("idle");
+});
+
+$("gear").addEventListener("click", () => {
+  const s = $("settings"), open = !s.classList.contains("open");
+  s.classList.toggle("open", open);
+  $("gear").setAttribute("aria-expanded", open);
+  if (open) { $("api").value = getApi(); $("api").focus(); }
+});
+$("saveApi").addEventListener("click", () => {
+  setApi($("api").value.trim().replace(/\/$/, ""));
+  $("settings").classList.remove("open");
+  $("gear").setAttribute("aria-expanded", "false");
+});
+
+setState("idle");
 </script>
 </body>
 </html>

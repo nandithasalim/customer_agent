@@ -5,10 +5,15 @@ from fastapi import UploadFile, File, Form
 from fastapi.responses import HTMLResponse
 from openai import OpenAI
 from main import app          # reuse the same app, so /chat still works
+from fastapi.middleware.cors import CORSMiddleware
 from agent import chat
 from voice_utils import clean_digits
 
 client = OpenAI()
+
+# lets a separately hosted frontend (e.g. built with Lovable) call this API from the browser.
+# Wide open for local demos; restrict allow_origins to your frontend's URL when you deploy.
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 @app.get("/", response_class=HTMLResponse)
