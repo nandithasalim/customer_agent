@@ -174,7 +174,7 @@
         <li>Every change is tested against 18 kinds of simulated callers before it ships.</li>
         <li>Speech in with Whisper, speech out with text-to-speech, same agent as the text chat.</li>
       </ul>
-      <p class="try">Press the button and try <q>I need an appointment tomorrow afternoon</q>, then give a name and a 10-digit mobile number.</p>
+      <p class="try">Press the button and try <q>I need an appointment tomorrow afternoon</q>, then give a name and a 10-digit mobile number. Use a made-up number: demo calls are deleted after a day.</p>
     </div>
 
     <div class="call" aria-label="Voice call with the clinic assistant">
@@ -352,8 +352,12 @@ function addError(msg, retry) {
   }
 }
 
+async function serverError(r) {
+  try { const j = await r.json(); if (j && j.message) return j.message; } catch (e) {}
+  return offline(r.status);
+}
 function offline(status) {
-  if (status) return "The server answered with an error (" + status + "). Check the terminal running uvicorn.";
+  if (status) return "The server answered with an error (" + status + "). Please try again in a moment.";
   return "Can't reach the booking server" + (getApi() ? " at " + getApi() : "") + ". Start it with: uvicorn voice_app:app --port 8000";
 }
 
@@ -436,7 +440,7 @@ async function sendVoice(blob) {
     form.append("session_id", sid);
     form.append("audio", blob, blob.type.includes("mp4") ? "call.mp4" : "call.webm");
     const r = await fetch(getApi() + "/voice", { method: "POST", body: form });
-    if (!r.ok) { pending.remove(); addError(offline(r.status), () => sendVoice(blob)); setState("idle"); return; }
+    if (!r.ok) { pending.remove(); addError(await serverError(r), () => sendVoice(blob)); setState("idle"); return; }
     const j = await r.json();
     pending.remove();
     connected();
@@ -459,7 +463,7 @@ async function sendText(message, showLine = true) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ session_id: sid, message })
     });
-    if (!r.ok) { addError(offline(r.status), () => sendText(message, false)); setState("idle"); return; }
+    if (!r.ok) { addError(await serverError(r), () => sendText(message, false)); setState("idle"); return; }
     const j = await r.json();
     connected();
     addLine("agent", j.reply);
