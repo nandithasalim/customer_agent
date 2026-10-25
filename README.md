@@ -105,3 +105,12 @@ Browser mic page (`voice.html`, served by `voice_app.py`) -> Whisper -> the same
 - Whisper dropped a digit once in 30 calls (`8962339400` heard as `896-239-400`); the agent refused the 9-digit number instead of booking it.
 - Bug found by this test: Whisper writes numbers like `8127-8125-97`, and the LLM counted the digits wrongly and rejected valid numbers. Fixed by merging digit groups in code and removing digit-counting from the prompt.
 - Limits: clean synthetic audio only, no phone-line noise or accents; English only; the scripted caller does not stop after a successful booking, which caused one of the two no-booking calls.
+
+## Voice channel
+Browser mic page (`voice.html`, served by `voice_app.py`) -> Whisper -> the same agent with voice-specific prompt rules -> text-to-speech.
+`voice_bench.py` simulates calls with synthetic speech (6 voices, 4 speeds, random phone numbers) and checks the number stored in the database.
+
+- 30 simulated calls: 28 booked with the correct phone number, **0 booked with a wrong number**, 2 ended without a booking (see `voice_results.txt`).
+- Whisper dropped a digit once in 30 calls (`8962339400` heard as `896-239-400`); the agent refused the 9-digit number instead of booking it.
+- Bug found by this test: Whisper writes numbers like `8127-8125-97`, and the LLM counted the digits wrongly and rejected valid numbers. Fixed by merging digit groups in code and removing digit-counting from the prompt.
+- Limits: clean synthetic audio only, no phone-line noise or accents; English only; the scripted caller does not stop after a successful booking, which caused one of the two no-booking calls.
