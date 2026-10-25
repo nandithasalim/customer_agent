@@ -13,6 +13,8 @@ Same bench, same 16 customer types x 5 runs = 80 simulated chats per column.
 
 Pass/fail counts only checks that code can verify (database state, handoff counts, phone validity). An LLM also reviews each chat, but its notes are advisory and do not change the score.
 
+Full transcripts of every run (failures first): [before](results/report_before_final.html), [after](results/report_after_final.html), [language test](results/report_lang_before.html). Voice run: [voice_results.txt](results/voice_results.txt).
+
 ## What the bench found, and what I changed
 
 | Problem found | Fix |
