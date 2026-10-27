@@ -2,7 +2,7 @@ openai
 fastapi
 uvicorn
 python-dotenv
-psycopg[binary]
+psycopg[binary,pool]
 httpx
 pyyaml
 python-multipart

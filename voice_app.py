@@ -4,6 +4,7 @@ Run locally:   uvicorn voice_app:app --port 8000
 On a host:     uvicorn voice_app:app --host 0.0.0.0 --port $PORT
 """
 import base64, io, os, threading, time
+T = time.perf_counter
 from collections import defaultdict, deque
 
 from dotenv import load_dotenv
@@ -107,6 +108,7 @@ def health():
 
 @app.post("/voice")
 def voice(session_id: str = Form(...), audio: UploadFile = File(...)):
+    t0 = T()
     data = audio.file.read()
     ext = "mp4" if "mp4" in (audio.content_type or "") else "webm"
     f = io.BytesIO(data)
@@ -118,12 +120,16 @@ def voice(session_id: str = Form(...), audio: UploadFile = File(...)):
         prompt="Clinic appointment call. Phone numbers have 10 digits.",
     ).text
 
+    t1 = T()
     if not heard.strip():
         reply = "Sorry, I didn't catch that. Could you say it again?"
     else:
         reply = chat(session_id, clean_digits(heard), channel="voice")
 
+    t2 = T()
     speech = client.audio.speech.create(model="tts-1", voice="alloy", input=reply)
+    t3 = T()
+    print(f"TIMING whisper={t1-t0:.1f}s agent={t2-t1:.1f}s tts={t3-t2:.1f}s total={t3-t0:.1f}s", flush=True)
     return {
         "heard": heard,
         "reply": reply,
