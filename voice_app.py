@@ -97,6 +97,32 @@ def setup_database():
         print("database setup failed:", e)
 
 
+# ---------- keep the free Render server awake ----------
+# Render's free plan stops the server after 15 minutes without incoming requests, and the next
+# visitor waits about a minute while it boots. Render sets RENDER_EXTERNAL_URL on its servers, so
+# this only runs there (never locally): every 10 minutes the app calls its own public /health,
+# which reaches it through Render like any visitor. /health touches neither OpenAI nor the database.
+KEEP_AWAKE_SECONDS = 600
+
+
+def keep_awake(url):
+    import httpx
+    while True:
+        time.sleep(KEEP_AWAKE_SECONDS)
+        try:
+            httpx.get(url, timeout=30)
+        except Exception as e:
+            print("keep-awake ping failed:", e, flush=True)
+
+
+@app.on_event("startup")
+def start_keep_awake():
+    base = os.getenv("RENDER_EXTERNAL_URL")
+    if base and os.getenv("KEEP_AWAKE", "1") == "1":
+        threading.Thread(target=keep_awake, args=(base.rstrip("/") + "/health",), daemon=True).start()
+        print("keep-awake ping every 10 minutes:", base, flush=True)
+
+
 # ---------- quick replies: buttons the caller can tap instead of speaking ----------
 YES_NO = re.compile(r"(is that (right|correct|ok|okay)|shall i|should i|would you like (me )?to|do you want (me )?to|can i go ahead|do you confirm)[^?]*\?\s*$", re.I)
 HOUR_WORDS = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"]
