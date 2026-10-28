@@ -69,6 +69,9 @@
   .line .heard { margin-top: 6px; font-size: 13.5px; color: #9fbcb3; }
   .digits { font-variant-numeric: tabular-nums; background: rgba(242,180,65,.16); color: var(--amber); border-radius: 6px; padding: 1px 6px; letter-spacing: .02em; }
   .line.err .say { color: #ffd3d6; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .chip { background: rgba(255,255,255,.08); color: #eaf3ef; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 8px 16px; font: 600 14.5px var(--body); cursor: pointer; font-variant-numeric: tabular-nums; }
+  .chip:hover { background: rgba(242,180,65,.18); border-color: var(--amber); }
   .retry { margin-top: 8px; }
 
   .dock { border-top: 1px solid rgba(255,255,255,.1); padding: 18px 6px 4px; display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: center; }
@@ -284,7 +287,7 @@ const ICONS = {
   mute: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/>'
 };
 
-let sid = newSid(), state = "idle", turns = 0;
+let sid = newSid(), state = "idle", turns = 0, turnId = 0;
 let recorder = null, stream = null, chunks = [], timer = null, t0 = 0;
 let audioCtx = null, analyser = null, raf = null, player = null;
 
@@ -297,13 +300,15 @@ function setState(s, extra) {
   mic.dataset.state = s;
   statusEl.dataset.state = s;
   mic.disabled = s === "thinking";
+  if (s === "recording" || s === "thinking") clearChips();
   textIn.disabled = sendBtn.disabled = (s === "thinking" || s === "recording");
-  ico.innerHTML = ({ idle: ICONS.mic, recording: ICONS.stop, thinking: ICONS.wait, speaking: ICONS.mute })[s];
-  mic.setAttribute("aria-label", ({ idle: "Start talking", recording: "Stop and send", thinking: "Working", speaking: "Stop the reply" })[s]);
+  ico.innerHTML = ({ idle: ICONS.mic, recording: ICONS.stop, thinking: ICONS.wait, voicing: ICONS.wait, speaking: ICONS.mute })[s];
+  mic.setAttribute("aria-label", ({ idle: "Start talking", recording: "Stop and send", thinking: "Working", voicing: "Skip the voice and talk", speaking: "Stop the reply" })[s]);
   statusText.textContent = ({
     idle: turns ? "Your turn. Press to talk" : "Press to talk",
     recording: "Listening " + (extra || "0:00") + ". Press to send",
     thinking: "Working on it",
+    voicing: "Preparing the voice. Press to skip and talk",
     speaking: "Speaking. Press to stop"
   })[s];
 }
@@ -342,6 +347,28 @@ function addLine(kind, text, heard) {
   return row;
 }
 
+function clearChips() { document.querySelectorAll(".chips").forEach(c => c.remove()); }
+
+// quick replies: tap instead of speaking (Yes/No, or a time the agent just offered)
+function addOptions(row, options) {
+  clearChips();
+  if (!options || !options.length) return;
+  const box = document.createElement("div");
+  box.className = "chips";
+  options.forEach(label => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.textContent = label;
+    b.onclick = () => {
+      if (state === "recording" || state === "thinking") return;
+      stopAudio();
+      sendText(/\d/.test(label) ? label + " please" : label, true, label);
+    };
+    box.appendChild(b);
+  });
+  row.appendChild(box);
+  log.scrollTop = log.scrollHeight;
+}
+
 function addError(msg, retry) {
   const row = addLine("err", msg);
   if (retry) {
@@ -365,13 +392,25 @@ function connected() { turns++; info.textContent = "Connected, call " + sid.slic
 
 // ---------- playback ----------
 function stopAudio() { if (player) { player.pause(); player = null; } }
-function play(b64) {
-  stopAudio();
-  player = new Audio("data:audio/mpeg;base64," + b64);
-  const done = () => { player = null; if (state === "speaking") setState("idle"); };
-  player.onended = done; player.onerror = done;
-  setState("speaking");
-  player.play().catch(done);
+async function speak(text, id) {
+  setState("voicing");
+  try {
+    const r = await fetch(getApi() + "/tts", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+    if (!r.ok || r.status === 204) throw new Error("no audio");
+    const url = URL.createObjectURL(await r.blob());
+    if (id !== turnId || state !== "voicing") { URL.revokeObjectURL(url); return; }  // caller moved on
+    stopAudio();
+    player = new Audio(url);
+    const done = () => { URL.revokeObjectURL(url); player = null; if (state === "speaking") setState("idle"); };
+    player.onended = done; player.onerror = done;
+    setState("speaking");
+    player.play().catch(done);
+  } catch (e) {
+    if (id === turnId && state === "voicing") setState("idle");   // text is already shown; just skip the voice
+  }
 }
 
 // ---------- level meter while recording ----------
@@ -445,8 +484,9 @@ async function sendVoice(blob) {
     pending.remove();
     connected();
     addLine("caller", j.heard || "(nothing was heard)", j.heard || "");
-    addLine("agent", j.reply);
-    if (j.audio) play(j.audio); else setState("idle");
+    const row = addLine("agent", j.reply);
+    addOptions(row, j.options);
+    speak(j.reply, ++turnId);
   } catch (e) {
     pending.remove();
     addError(offline(), () => sendVoice(blob));
@@ -455,27 +495,30 @@ async function sendVoice(blob) {
 }
 
 // ---------- text turn ----------
-async function sendText(message, showLine = true) {
+async function sendText(message, showLine = true, shown = null) {
   setState("thinking");
-  if (showLine) addLine("caller", message);
+  if (showLine) addLine("caller", shown || message);
   try {
-    const r = await fetch(getApi() + "/chat", {
+    const r = await fetch(getApi() + "/say", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ session_id: sid, message })
     });
     if (!r.ok) { addError(await serverError(r), () => sendText(message, false)); setState("idle"); return; }
     const j = await r.json();
     connected();
-    addLine("agent", j.reply);
+    const row = addLine("agent", j.reply);
+    addOptions(row, j.options);
+    speak(j.reply, ++turnId);
   } catch (e) {
     addError(offline(), () => sendText(message, false));
+    setState("idle");
   }
-  setState("idle");
 }
 
 // ---------- events ----------
 mic.addEventListener("click", () => {
   if (state === "idle") startRecording();
+  else if (state === "voicing") { turnId++; setState("idle"); startRecording(); }
   else if (state === "recording") recorder.stop();
   else if (state === "speaking") { stopAudio(); setState("idle"); }
 });
@@ -483,13 +526,14 @@ mic.addEventListener("click", () => {
 $("typeForm").addEventListener("submit", e => {
   e.preventDefault();
   const m = textIn.value.trim();
-  if (!m || state !== "idle") return;
+  if (!m || (state !== "idle" && state !== "voicing" && state !== "speaking")) return;
+  stopAudio(); turnId++;
   textIn.value = "";
   sendText(m);
 });
 
 $("newcall").addEventListener("click", () => {
-  stopAudio();
+  stopAudio(); turnId++;
   if (recorder && recorder.state === "recording") {
     recorder.onstop = null; recorder.stop();
     stream.getTracks().forEach(t => t.stop());

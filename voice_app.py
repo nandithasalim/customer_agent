@@ -1,9 +1,10 @@
-"""The web app: demo page at /, text chat at /chat (from main.py), voice at /voice.
+"""The web app: demo page at /, text chat at /chat (from main.py), voice at /voice,
+button/typed turns on the voice page at /say, and speech for a reply at /tts.
 
 Run locally:   uvicorn voice_app:app --port 8000
 On a host:     uvicorn voice_app:app --host 0.0.0.0 --port $PORT
 """
-import base64, io, os, threading, time
+import io, json, os, re, threading, time
 T = time.perf_counter
 from collections import defaultdict, deque
 
@@ -11,20 +12,21 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 from fastapi import File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from openai import OpenAI
+from pydantic import BaseModel
 
 from main import app          # reuse the same app, so /chat still works
-from agent import chat
+from agent import chat, load_history
 from db import connect
 from voice_utils import clean_digits
 
 client = OpenAI()
 
 # ---------- limits, so a public link can't burn the OpenAI budget ----------
-PER_IP_PER_HOUR = int(os.getenv("PER_IP_PER_HOUR", "40"))     # messages per visitor per hour
-GLOBAL_PER_DAY = int(os.getenv("GLOBAL_PER_DAY", "400"))      # messages for the whole site per day
-MAX_BODY = {"/chat": 5_000, "/voice": 3_000_000}             # bytes; 3 MB is about a minute of audio
+PER_IP_PER_HOUR = int(os.getenv("PER_IP_PER_HOUR", "80"))     # requests per visitor per hour (a voice turn is 2: reply + speech)
+GLOBAL_PER_DAY = int(os.getenv("GLOBAL_PER_DAY", "800"))      # requests for the whole site per day
+MAX_BODY = {"/chat": 5_000, "/say": 5_000, "/tts": 5_000, "/voice": 3_000_000}   # bytes; 3 MB is about a minute of audio
 
 _hits = defaultdict(deque)
 _day = {"date": None, "n": 0}
@@ -95,6 +97,57 @@ def setup_database():
         print("database setup failed:", e)
 
 
+# ---------- quick replies: buttons the caller can tap instead of speaking ----------
+YES_NO = re.compile(r"(is that (right|correct|ok|okay)|shall i|should i|would you like (me )?to|do you want (me )?to|can i go ahead|do you confirm)[^?]*\?\s*$", re.I)
+HOUR_WORDS = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"]
+
+
+def _time_mentioned(reply, h, m):
+    """Does the reply mention this clock time, in digits ('2:30', '2 PM') or words ('two thirty')?"""
+    w = HOUR_WORDS[h]
+    if m == 30:
+        pats = [rf"\b{h}[:.]30\b", rf"\b{w}[\s-]thirty\b", rf"\bhalf past {w}\b"]
+    elif m == 0:
+        pats = [rf"\b{h}(:00)?\s*(a\.?m|p\.?m|o'?\s?clock)", rf"\b{h}:00\b",
+                rf"\b{w}\s+(o'?\s?clock|in the|a\.?m|p\.?m)",
+                rf"\b({w}|{h})\b(?=\s*(,|and\b|or\b))"]   # an hour in a list: "three, and four in the afternoon"
+        if h == 12:
+            pats.append(r"\bnoon\b")
+    else:
+        pats = [rf"\b{h}[:.]{m:02d}\b"]
+    return any(re.search(p, reply, re.I) for p in pats)
+
+
+def quick_options(session_id, reply):
+    """Yes/No for confirmation questions; real free slots the reply offered, as time buttons."""
+    reply = (reply or "").strip()
+    if not reply.endswith("?"):
+        return []
+    if YES_NO.search(reply):
+        return ["Yes", "No"]
+    slots = []                                   # list_slots results from this turn only
+    for msg in reversed(load_history(session_id)):
+        if msg.get("role") == "user":
+            break
+        if msg.get("role") == "tool":
+            try:
+                data = json.loads(msg.get("content") or "{}")
+            except (TypeError, ValueError):
+                continue
+            if isinstance(data, dict) and isinstance(data.get("slots"), list):
+                slots = data["slots"] + slots
+    labels = []
+    for slot in slots:
+        mt = re.match(r"(\d{1,2}):(\d{2}) (AM|PM)", slot.get("time", ""))
+        if not mt:
+            continue
+        h, m, ap = int(mt.group(1)), int(mt.group(2)), mt.group(3)
+        label = f"{h}:{m:02d} {ap}"
+        if label not in labels and _time_mentioned(reply, h, m):
+            labels.append(label)
+    return labels[:4]
+
+
 # ---------- routes ----------
 @app.get("/", response_class=HTMLResponse)
 def home():
@@ -126,12 +179,38 @@ def voice(session_id: str = Form(...), audio: UploadFile = File(...)):
     else:
         reply = chat(session_id, clean_digits(heard), channel="voice")
 
+    options = quick_options(session_id, reply)
     t2 = T()
-    speech = client.audio.speech.create(model="tts-1", voice="alloy", input=reply)
-    t3 = T()
-    print(f"TIMING whisper={t1-t0:.1f}s agent={t2-t1:.1f}s tts={t3-t2:.1f}s total={t3-t0:.1f}s", flush=True)
-    return {
-        "heard": heard,
-        "reply": reply,
-        "audio": base64.b64encode(speech.content).decode(),
-    }
+    print(f"TIMING voice whisper={t1-t0:.1f}s agent={t2-t1:.1f}s text-ready={t2-t0:.1f}s", flush=True)
+    return {"heard": heard, "reply": reply, "options": options}
+
+
+class SayIn(BaseModel):
+    session_id: str
+    message: str
+
+
+@app.post("/say")
+def say(body: SayIn):
+    """A typed message or a tapped quick reply on the voice page: same agent, voice rules, no speech-to-text."""
+    t0 = T()
+    reply = chat(body.session_id, clean_digits(body.message), channel="voice")
+    options = quick_options(body.session_id, reply)
+    print(f"TIMING say agent={T()-t0:.1f}s", flush=True)
+    return {"reply": reply, "options": options}
+
+
+class TtsIn(BaseModel):
+    text: str
+
+
+@app.post("/tts")
+def tts(body: TtsIn):
+    """Speech for a reply the page already shows, fetched separately so the text appears first."""
+    text = body.text.strip()[:600]
+    if not text:
+        return Response(status_code=204)
+    t0 = T()
+    audio = client.audio.speech.create(model="tts-1", voice="alloy", input=text).content
+    print(f"TIMING tts={T()-t0:.1f}s", flush=True)
+    return Response(content=audio, media_type="audio/mpeg")
