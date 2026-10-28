@@ -333,15 +333,9 @@ function addLine(kind, text, heard) {
   who.textContent = kind === "agent" ? "Assistant" : kind === "err" ? "Connection" : "You";
   const say = document.createElement("div");
   say.className = "say";
-  say.textContent = text;
+  if (heard !== undefined) withDigits(say, text);   // spoken turns: highlight numbers so a misheard digit stands out
+  else say.textContent = text;
   row.append(who, say);
-  if (heard !== undefined) {
-    const h = document.createElement("div");
-    h.className = "heard";
-    h.append("Heard as ");
-    withDigits(h, heard || "nothing");
-    row.appendChild(h);
-  }
   log.appendChild(row);
   log.scrollTop = log.scrollHeight;
   return row;
